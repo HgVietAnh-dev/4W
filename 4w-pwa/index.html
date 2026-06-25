@@ -160,11 +160,11 @@
                 <div class="grid grid-cols-2 gap-2">
                     <div>
                         <label class="block text-[11px] font-bold text-slate-600 mb-1">Giờ bắt đầu</label>
-                        <select id="event-start" class="w-full text-xs px-2.5 py-2 border border-slate-200 rounded-xl bg-white"></select>
+                        <input type="time" id="event-start" value="08:00" class="w-full text-xs px-2.5 py-2 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500/20 focus:outline-none">
                     </div>
                     <div>
                         <label class="block text-[11px] font-bold text-slate-600 mb-1">Giờ kết thúc</label>
-                        <select id="event-end" class="w-full text-xs px-2.5 py-2 border border-slate-200 rounded-xl bg-white"></select>
+                        <input type="time" id="event-end" value="09:00" class="w-full text-xs px-2.5 py-2 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500/20 focus:outline-none">
                     </div>
                 </div>
 
@@ -567,16 +567,7 @@ function highlightTodayColumn() {
 }
 
 function initSelectHours() {
-    const ss = document.getElementById('event-start');
-    const se = document.getElementById('event-end');
-    ss.innerHTML = '';
-    se.innerHTML = '';
-    for (let i = START_HOUR; i <= END_HOUR; i++) {
-        const h = `${i < 10 ? '0'+i : i}:00`;
-        ss.options.add(new Option(h, i));
-        se.options.add(new Option(h, i));
-    }
-    se.value = START_HOUR + 1;
+    // Không cần khởi tạo — dùng input[type=time] trực tiếp
 }
 
 function toggleRepeatOptions() {
@@ -632,10 +623,10 @@ function renderEventsOnTimeline() {
             card.style.height = `${heightPos}px`;
             card.innerHTML = `
                 <div class="font-bold truncate" title="${escHtml(ev.title)}">${escHtml(ev.title)}</div>
-                <div class="text-[9px] opacity-80">${ev.start}h–${ev.end}h ${ev.repeat === 'weekly' ? '🔄' : ''}</div>
+                <div class="text-[9px] opacity-80">${ev.startStr || ev.start+'h'}–${ev.endStr || ev.end+'h'} ${ev.repeat === 'weekly' ? '🔄' : ''}</div>
             `;
             card.onclick = () => {
-                if (confirm(`SỰ KIỆN: ${ev.title}\nThứ: ${DAY_NAMES[ev.day]}  ${ev.start}:00–${ev.end}:00\nGhi chú: ${ev.note || 'Không có'}\n\nXÓA lịch trình này?`))
+                if (confirm(`SỰ KIỆN: ${ev.title}\nThứ: ${DAY_NAMES[ev.day]}  ${ev.startStr || ev.start+':00'}–${ev.endStr || ev.end+':00'}\nGhi chú: ${ev.note || 'Không có'}\n\nXÓA lịch trình này?`))
                     deleteEvent(ev.id);
             };
             document.getElementById(`col-${ev.day}`).appendChild(card);
@@ -685,18 +676,25 @@ document.getElementById('event-form').addEventListener('submit', function(e) {
     const title        = document.getElementById('event-title').value.trim();
     const day          = parseInt(document.getElementById('event-day').value);
     const type         = document.getElementById('event-type').value;
-    const start        = parseInt(document.getElementById('event-start').value);
-    const end          = parseInt(document.getElementById('event-end').value);
+    const startVal     = document.getElementById('event-start').value; // "HH:MM"
+    const endVal       = document.getElementById('event-end').value;
     const note         = document.getElementById('event-note').value.trim();
     const radio        = document.querySelector('input[name="event-repeat"]:checked');
     const repeat       = (type === 'calendar' && radio) ? radio.value : 'once';
     const nbRadio      = document.querySelector('input[name="notify-before"]:checked');
     const notifyBefore = (type === 'calendar' && nbRadio) ? nbRadio.value : '2h';
 
+    if (!startVal || !endVal) { alert('Vui lòng chọn giờ bắt đầu và kết thúc!'); return; }
+
+    const [sh, sm] = startVal.split(':').map(Number);
+    const [eh, em] = endVal.split(':').map(Number);
+    const start = sh + sm / 60;
+    const end   = eh + em / 60;
+
     if (start >= end) { alert('Lỗi: Giờ kết thúc phải lớn hơn giờ bắt đầu!'); return; }
     if (!Array.isArray(events)) events = [];
 
-    const newEv = { id: Date.now(), title, day, start, end, repeat, type, note, notifyBefore, completed: false };
+    const newEv = { id: Date.now(), title, day, start, end, startStr: startVal, endStr: endVal, repeat, type, note, notifyBefore, completed: false };
     events.push(newEv);
     saveToStorage();
     renderEventsOnTimeline();
