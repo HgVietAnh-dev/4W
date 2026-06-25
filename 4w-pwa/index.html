@@ -289,10 +289,10 @@ let defaultEvents = [
     { id: 3, title: "Học Kỹ Thuật Lập Trình", day: 3, start: 13, end: 16, repeat: "once", type: "calendar", note: "Mang theo laptop", completed: false }
 ];
 let defaultMembers = [
-    { name: "Nguyễn Văn Anh", phone: "0912345678", present: true },
-    { name: "Trần Thị Bình",  phone: "0987654321", present: true },
+    { name: "Nguyễn Văn Anh", phone: "0912345678", present: false },
+    { name: "Trần Thị Bình",  phone: "0987654321", present: false },
     { name: "Lê Hoàng Công",  phone: "0905556667", present: false },
-    { name: "Phạm Minh Tâm",  phone: "0934888999", present: true }
+    { name: "Phạm Minh Tâm",  phone: "0934888999", present: false }
 ];
 
 let events  = [];
@@ -773,7 +773,7 @@ function handleExcelImport(e) {
                 if (name && phone) imported.push({ name: name.toString().trim(), phone: phone.toString().trim().replace(/[^0-9]/g,''), present: true });
             });
             if (imported.length > 0) {
-                members = imported;
+                members = imported.map(m => ({ ...m, present: false }));
                 saveToStorage();
                 renderMemberList();
                 alert(`✅ Đã nạp ${imported.length} thành viên!`);
@@ -787,16 +787,36 @@ function handleExcelImport(e) {
 
 function exportAttendanceToExcel() {
     try {
-        const data = members.map((m, i) => ({
-            "STT": i+1, "Họ và Tên": m.name,
-            "Số Điện Thoại": m.phone,
-            "Trạng Thái": m.present ? "Có Mặt (X)" : "Vắng Mặt"
-        }));
-        const ws = XLSX.utils.json_to_sheet(data);
+        const today = new Date();
+        const dateStr = `${today.getDate()}/${today.getMonth()+1}/${today.getFullYear()}`;
+        const presentCount = members.filter(m => m.present).length;
+
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "DiemDanh_4W");
-        ws["!cols"] = [{ wch:6 },{ wch:25 },{ wch:15 },{ wch:20 }];
-        XLSX.writeFile(wb, `DiemDanh_Lop_${new Date().toISOString().slice(0,10)}.xlsx`);
+        const ws = XLSX.utils.aoa_to_sheet([]);
+
+        // Dòng tiêu đề ngày
+        XLSX.utils.sheet_add_aoa(ws, [
+            [`BẢNG ĐIỂM DANH — Ngày ${dateStr}`],
+            [`Có mặt: ${presentCount}/${members.length} người`],
+            [],
+            ['STT', 'Họ và Tên', 'Trạng Thái']
+        ], { origin: 'A1' });
+
+        // Dữ liệu thành viên
+        members.forEach((m, i) => {
+            XLSX.utils.sheet_add_aoa(ws, [
+                [i + 1, m.name, m.present ? 'Có Mặt ✓' : 'Vắng Mặt ✗']
+            ], { origin: { r: 4 + i, c: 0 } });
+        });
+
+        ws['!cols'] = [{ wch: 5 }, { wch: 28 }, { wch: 14 }];
+        ws['!merges'] = [
+            { s: { r: 0, c: 0 }, e: { r: 0, c: 2 } },
+            { s: { r: 1, c: 0 }, e: { r: 1, c: 2 } }
+        ];
+
+        XLSX.utils.book_append_sheet(wb, ws, 'Điểm Danh');
+        XLSX.writeFile(wb, `DiemDanh_${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}.xlsx`);
     } catch(err) { alert('Lỗi xuất Excel: ' + err.message); }
 }
 

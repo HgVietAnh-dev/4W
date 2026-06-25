@@ -190,6 +190,18 @@ app.get('/api/test', async (req, res) => {
 });
 
 // ================================================================
+// KEEP-ALIVE — tự ping mỗi 10 phút để Render không sleep
+// ================================================================
+const SERVER_URL = process.env.RENDER_EXTERNAL_URL || '';
+if (SERVER_URL) {
+    cron.schedule('*/10 * * * *', () => {
+        fetch(`${SERVER_URL}/`)
+            .then(() => console.log('[Keep-alive] Pinged'))
+            .catch(e => console.warn('[Keep-alive] Failed:', e.message));
+    });
+}
+
+// ================================================================
 // START
 // ================================================================
 const PORT = process.env.PORT || 3000;
