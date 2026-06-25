@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>4W - Workspace Cá Nhân</title>
+
+    <!-- PWA Meta -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#4f46e5">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="4W Workspace">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+
+    <!-- XLSX -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+
+    <style>
+        .timeline-grid {
+            display: grid;
+            grid-template-columns: 60px repeat(7, minmax(90px, 1fr));
+        }
+        .time-row {
+            height: 65px;
+            border-bottom: 1px solid #f3f4f6;
+        }
+        .custom-scrollbar::-webkit-scrollbar { height: 6px; width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 3px; }
+
+        /* Offline banner */
+        #offline-banner {
+            display: none;
+            position: fixed; bottom: 0; left: 0; right: 0;
+            background: #dc2626; color: white;
+            text-align: center; padding: 8px; font-size: 12px;
+            z-index: 9999; font-weight: bold;
+        }
+        /* Notification permission banner */
+        #notif-permission-bar {
+            display: none;
+            background: #fef3c7; border-bottom: 2px solid #f59e0b;
+            padding: 8px 16px; font-size: 12px;
+            align-items: center; justify-content: space-between; gap: 8px;
+        }
+        .today-col { background: #eef2ff !important; }
+    </style>
+</head>
+<body class="bg-slate-50 font-sans text-slate-800 antialiased">
+
+<!-- Offline Banner -->
+<div id="offline-banner">📵 Đang offline — Dữ liệu đã được lưu cục bộ, app vẫn hoạt động bình thường</div>
+
+<!-- Notification Permission Bar -->
+<div id="notif-permission-bar" class="flex">
+    <span>🔔 Cho phép thông báo để nhận nhắc nhở sự kiện tự động?</span>
+    <div class="flex gap-2 shrink-0">
+        <button onclick="requestNotificationPermission()" class="bg-indigo-600 text-white px-3 py-1 rounded-lg text-xs font-bold">Cho phép</button>
+        <button onclick="document.getElementById('notif-permission-bar').style.display='none'" class="bg-slate-200 text-slate-700 px-3 py-1 rounded-lg text-xs">Bỏ qua</button>
+    </div>
+</div>
+
+<header class="bg-indigo-600 text-white shadow-md sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
+        <div class="flex items-center space-x-2">
+            <i data-lucide="layout-dashboard" class="w-5 h-5 md:w-6 md:h-6"></i>
+            <span class="text-lg md:text-xl font-bold tracking-wider">4W - WORKSPACE</span>
+        </div>
+        <div class="flex items-center gap-2">
+            <span id="notif-status" class="text-[10px] bg-indigo-700 px-2 py-0.5 rounded-full border border-indigo-500 cursor-pointer" onclick="showNotifStatus()">🔔 Thông báo</span>
+            <span class="text-[11px] md:text-xs bg-indigo-700 px-2.5 py-1 rounded-full border border-indigo-500">5h – 22h</span>
+        </div>
+    </div>
+</header>
+
+<main class="max-w-7xl mx-auto px-3 py-4 md:py-6 grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+    <!-- Timeline -->
+    <section class="lg:col-span-2 bg-white rounded-2xl shadow-xs border border-slate-200/80 p-3 md:p-4">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 pb-2 border-b border-slate-100 gap-1">
+            <h2 class="text-base md:text-lg font-bold flex items-center text-indigo-950">
+                <i data-lucide="calendar-days" class="w-5 h-5 mr-1.5 text-indigo-600"></i>
+                LỊCH TRÌNH TRONG TUẦN
+            </h2>
+            <span class="text-[11px] text-slate-400 italic">Vuốt ngang ↔ để xem trọn tuần</span>
+        </div>
+
+        <div class="overflow-x-auto custom-scrollbar border border-slate-200 rounded-xl bg-white shadow-inner">
+            <div class="min-w-[700px] sm:min-w-full">
+                <div class="grid timeline-grid bg-slate-50 font-semibold text-xs md:text-sm text-center py-2.5 border-b border-slate-200 text-slate-600" id="week-header">
+                    <div class="flex items-center justify-center font-bold text-slate-400">Giờ</div>
+                    <div class="py-1" data-col="2">Thứ 2</div>
+                    <div class="py-1" data-col="3">Thứ 3</div>
+                    <div class="py-1" data-col="4">Thứ 4</div>
+                    <div class="py-1" data-col="5">Thứ 5</div>
+                    <div class="py-1" data-col="6">Thứ 6</div>
+                    <div class="py-1" data-col="7">Thứ 7</div>
+                    <div class="py-1 text-red-600" data-col="8">Chủ Nhật</div>
+                </div>
+
+                <div class="relative bg-white select-none" id="timeline-body">
+                    <div id="timeline-background-rows"></div>
+                    <div id="event-slots-layer" class="absolute inset-0 timeline-grid pointer-events-none">
+                        <div class="h-full"></div>
+                        <div id="col-2" class="relative border-r border-slate-100 h-full"></div>
+                        <div id="col-3" class="relative border-r border-slate-100 h-full"></div>
+                        <div id="col-4" class="relative border-r border-slate-100 h-full"></div>
+                        <div id="col-5" class="relative border-r border-slate-100 h-full"></div>
+                        <div id="col-6" class="relative border-r border-slate-100 h-full"></div>
+                        <div id="col-7" class="relative border-r border-slate-100 h-full"></div>
+                        <div id="col-8" class="relative h-full"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Right Panel -->
+    <section class="space-y-5">
+
+        <!-- Add Event Form -->
+        <div class="bg-white rounded-2xl shadow-xs border border-slate-200/80 p-4">
+            <h2 class="text-sm md:text-base font-bold text-slate-900 mb-3 flex items-center border-b border-slate-100 pb-2">
+                <i data-lucide="calendar-plus" class="w-4 h-4 mr-1.5 text-indigo-600"></i>
+                Thêm Sự Kiện & Công Việc
+            </h2>
+            <form id="event-form" class="space-y-3">
+                <div>
+                    <label class="block text-[11px] font-bold text-slate-600 mb-1">Tên sự kiện / Tên công việc</label>
+                    <input type="text" id="event-title" required placeholder="Ví dụ: Tập thể dục buổi sáng..." class="w-full text-xs md:text-sm px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-slate-50/50">
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-600 mb-1">Chọn ngày (Thứ)</label>
+                        <select id="event-day" class="w-full text-xs px-2.5 py-2 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500/20">
+                            <option value="2">Thứ 2</option>
+                            <option value="3">Thứ 3</option>
+                            <option value="4">Thứ 4</option>
+                            <option value="5">Thứ 5</option>
+                            <option value="6">Thứ 6</option>
+                            <option value="7">Thứ 7</option>
+                            <option value="8">Chủ Nhật</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-600 mb-1">Phân loại mục</label>
+                        <select id="event-type" onchange="toggleRepeatOptions()" class="w-full text-xs px-2.5 py-2 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500/20">
+                            <option value="calendar">Sự kiện Lịch tuần</option>
+                            <option value="todo">Mục việc To-do list</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-600 mb-1">Giờ bắt đầu</label>
+                        <select id="event-start" class="w-full text-xs px-2.5 py-2 border border-slate-200 rounded-xl bg-white"></select>
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-600 mb-1">Giờ kết thúc</label>
+                        <select id="event-end" class="w-full text-xs px-2.5 py-2 border border-slate-200 rounded-xl bg-white"></select>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-[11px] font-bold text-slate-600 mb-1">Ghi chú thêm</label>
+                    <textarea id="event-note" rows="2" placeholder="Nhập địa điểm, nội dung lưu ý..." class="w-full text-xs px-3 py-1.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 bg-slate-50/50 resize-none"></textarea>
+                </div>
+
+                <div id="repeat-config-box" class="bg-slate-50 p-2.5 rounded-xl border border-dashed border-slate-200">
+                    <label class="block text-[11px] font-bold text-slate-700 mb-1">Cấu hình lặp:</label>
+                    <div class="flex space-x-4 text-xs">
+                        <label class="flex items-center space-x-1.5 cursor-pointer">
+                            <input type="radio" name="event-repeat" value="once" checked class="w-4 h-4 text-indigo-600 focus:ring-indigo-500">
+                            <span>Chỉ một lần</span>
+                        </label>
+                        <label class="flex items-center space-x-1.5 cursor-pointer">
+                            <input type="radio" name="event-repeat" value="weekly" class="w-4 h-4 text-indigo-600 focus:ring-indigo-500">
+                            <span class="text-indigo-600 font-semibold">Lặp lại hàng tuần 🔄</span>
+                        </label>
+                    </div>
+                </div>
+
+                <button type="submit" class="w-full bg-indigo-600 text-white font-semibold text-xs md:text-sm py-2.5 rounded-xl hover:bg-indigo-700 active:scale-[0.99] transition flex justify-center items-center shadow-xs">
+                    <i data-lucide="plus-circle" class="w-4 h-4 mr-1"></i> Thiết lập & Tạo thông báo
+                </button>
+            </form>
+
+            <div id="notification-preview" class="mt-3 p-2.5 bg-amber-50/50 border border-amber-200 rounded-xl hidden">
+                <span class="text-[11px] font-bold text-amber-800 flex items-center mb-1">
+                    <i data-lucide="bell" class="w-3.5 h-3.5 mr-1 text-amber-600"></i> Thông báo sẽ báo lúc:
+                </span>
+                <ul class="text-[11px] text-slate-600 space-y-0.5 list-disc pl-4" id="notify-time-list"></ul>
+            </div>
+        </div>
+
+        <!-- Todo List -->
+        <div class="bg-white rounded-2xl shadow-xs border border-slate-200/80 p-4">
+            <h2 class="text-sm md:text-base font-bold text-slate-900 mb-2 flex items-center border-b border-slate-100 pb-2">
+                <i data-lucide="check-square" class="w-4 h-4 mr-1.5 text-emerald-600"></i>
+                Việc Cần Làm & Ghi Chú
+            </h2>
+            <ul id="todo-list-render" class="space-y-2 max-h-44 overflow-y-auto pr-1 custom-scrollbar"></ul>
+        </div>
+
+        <!-- Members -->
+        <div class="bg-white rounded-2xl shadow-xs border border-slate-200/80 p-4">
+            <h2 class="text-sm md:text-base font-bold text-slate-900 flex items-center border-b border-slate-100 pb-2 mb-3">
+                <i data-lucide="users" class="w-4 h-4 mr-1.5 text-blue-600"></i>
+                Thành Viên & Điểm Danh
+            </h2>
+
+            <div class="grid grid-cols-2 gap-2 mb-3">
+                <div>
+                    <input type="file" id="excel-file-input" accept=".xlsx, .xls" class="hidden" onchange="handleExcelImport(event)">
+                    <button onclick="document.getElementById('excel-file-input').click()" class="w-full bg-slate-50 border border-slate-200 text-slate-700 rounded-xl py-2 text-[11px] font-bold hover:bg-slate-100 active:bg-slate-200 flex items-center justify-center transition">
+                        <i data-lucide="file-down" class="w-3.5 h-3.5 mr-1 text-emerald-600"></i> Nhập file Excel
+                    </button>
+                </div>
+                <div>
+                    <button onclick="exportAttendanceToExcel()" class="w-full bg-emerald-600 text-white rounded-xl py-2 text-[11px] font-bold hover:bg-emerald-700 active:bg-emerald-800 flex items-center justify-center transition shadow-xs">
+                        <i data-lucide="file-up" class="w-3.5 h-3.5 mr-1"></i> Xuất file Điểm danh
+                    </button>
+                </div>
+            </div>
+
+            <div class="relative mb-3">
+                <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400"></i>
+                </span>
+                <input type="text" id="member-search" oninput="renderMemberList()" placeholder="Tìm theo tên hoặc SĐT..." class="w-full text-xs pl-8 pr-3 py-2 border border-slate-200 rounded-xl bg-slate-50/50 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+            </div>
+
+            <div class="overflow-x-auto max-h-52 border border-slate-100 rounded-xl custom-scrollbar">
+                <table class="min-w-full text-xs text-left">
+                    <thead class="bg-slate-50 text-slate-500 sticky top-0 border-b border-slate-200">
+                        <tr>
+                            <th class="p-2.5 font-bold">Thành viên / SĐT</th>
+                            <th class="p-2.5 text-center font-bold w-20">Đi học</th>
+                        </tr>
+                    </thead>
+                    <tbody id="member-table-body" class="divide-y divide-slate-100"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Settings: Server URL -->
+        <div class="bg-white rounded-2xl shadow-xs border border-slate-200/80 p-4">
+            <h2 class="text-sm font-bold text-slate-900 flex items-center border-b border-slate-100 pb-2 mb-3">
+                <i data-lucide="settings" class="w-4 h-4 mr-1.5 text-slate-500"></i>
+                Cài đặt Telegram Server
+            </h2>
+            <div id="server-status" class="mb-2 text-[11px]"></div>
+            <div class="space-y-2">
+                <label class="block text-[11px] font-bold text-slate-600">URL Server (Render.com)</label>
+                <input type="text" id="server-url-input" placeholder="https://ten-server.onrender.com"
+                    class="w-full text-xs px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 bg-slate-50/50">
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="saveAndSyncServer()" class="bg-indigo-600 text-white rounded-xl py-2 text-[11px] font-bold hover:bg-indigo-700 transition flex items-center justify-center">
+                        <i data-lucide="link" class="w-3 h-3 mr-1"></i> Lưu & Đồng bộ
+                    </button>
+                    <button onclick="testServer()" class="bg-slate-100 text-slate-700 rounded-xl py-2 text-[11px] font-bold hover:bg-slate-200 transition flex items-center justify-center">
+                        <i data-lucide="send" class="w-3 h-3 mr-1"></i> Test Telegram
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </section>
+</main>
+
+<script>
+// ================================================================
+// DATA & STORAGE
+// ================================================================
+const DB_KEY_EVENTS  = '4w_events_v2';
+const DB_KEY_MEMBERS = '4w_members_v2';
+const DB_KEY_NOTIF   = '4w_notif_ids';
+
+let defaultEvents = [
+    { id: 1, title: "Chạy bộ buổi sáng", day: 2, start: 5, end: 7, repeat: "weekly", type: "calendar", note: "Chạy quanh công viên gần nhà", completed: false },
+    { id: 2, title: "Họp Giao Ban Đầu Tuần", day: 2, start: 8, end: 10, repeat: "weekly", type: "calendar", note: "Phòng họp tầng 2 hoặc Zoom", completed: false },
+    { id: 3, title: "Học Kỹ Thuật Lập Trình", day: 3, start: 13, end: 16, repeat: "once", type: "calendar", note: "Mang theo laptop", completed: false }
+];
+let defaultMembers = [
+    { name: "Nguyễn Văn Anh", phone: "0912345678", present: true },
+    { name: "Trần Thị Bình",  phone: "0987654321", present: true },
+    { name: "Lê Hoàng Công",  phone: "0905556667", present: false },
+    { name: "Phạm Minh Tâm",  phone: "0934888999", present: true }
+];
+
+let events  = [];
+let members = [];
+
+function loadFromStorage() {
+    try {
+        const se = JSON.parse(localStorage.getItem(DB_KEY_EVENTS));
+        events = Array.isArray(se) ? se : [...defaultEvents];
+    } catch { events = [...defaultEvents]; }
+    try {
+        const sm = JSON.parse(localStorage.getItem(DB_KEY_MEMBERS));
+        members = Array.isArray(sm) ? sm : [...defaultMembers];
+    } catch { members = [...defaultMembers]; }
+}
+
+function saveToStorage() {
+    try {
+        localStorage.setItem(DB_KEY_EVENTS,  JSON.stringify(events));
+        localStorage.setItem(DB_KEY_MEMBERS, JSON.stringify(members));
+    } catch(e) { console.error('Storage error', e); }
+}
+
+// ================================================================
+// CONSTANTS
+// ================================================================
+const START_HOUR  = 5;
+const END_HOUR    = 22;
+const ROW_HEIGHT  = 65;
+// day mapping: 2=Mon...8=Sun  →  JS getDay(): 1=Mon...0=Sun
+const DAY_NAMES   = ["", "", "Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "Chủ Nhật"];
+
+// ================================================================
+// SERVER SYNC — đồng bộ sự kiện lên Render server để gửi Telegram
+// ================================================================
+// Sau khi deploy server lên Render, thay URL này bằng URL thật của bạn
+let SERVER_URL = localStorage.getItem('4w_server_url') || '';
+
+async function syncToServer(eventsArr) {
+    if (!SERVER_URL) return;
+    try {
+        await fetch(`${SERVER_URL}/api/sync`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ events: eventsArr })
+        });
+    } catch(e) { console.warn('[Sync] Offline, will retry later'); }
+}
+
+async function addEventToServer(ev) {
+    if (!SERVER_URL) return;
+    try {
+        await fetch(`${SERVER_URL}/api/event`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(ev)
+        });
+    } catch(e) { console.warn('[AddEvent] Server unreachable'); }
+}
+
+async function deleteEventFromServer(id) {
+    if (!SERVER_URL) return;
+    try {
+        await fetch(`${SERVER_URL}/api/event/${id}`, { method: 'DELETE' });
+    } catch(e) { console.warn('[DeleteEvent] Server unreachable'); }
+}
+
+// ================================================================
+// PWA: SERVICE WORKER
+// ================================================================
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+            .then(reg => {
+                console.log('[SW] Registered:', reg.scope);
+                // Tell SW about current events for background check
+                if (reg.active) {
+                    reg.active.postMessage({ type: 'SCHEDULE_NOTIFICATIONS', events });
+                }
+            })
+            .catch(err => console.warn('[SW] Registration failed:', err));
+    });
+}
+
+// Offline / Online detection
+window.addEventListener('offline', () => {
+    document.getElementById('offline-banner').style.display = 'block';
+});
+window.addEventListener('online', () => {
+    document.getElementById('offline-banner').style.display = 'none';
+});
+if (!navigator.onLine) {
+    document.getElementById('offline-banner').style.display = 'block';
+}
+
+// ================================================================
+// NOTIFICATIONS
+// ================================================================
+let notificationTimers = [];
+
+function updateNotifStatusBadge() {
+    const badge = document.getElementById('notif-status');
+    const perm  = Notification.permission;
+    if (perm === 'granted') {
+        badge.textContent = '🔔 Bật';
+        badge.style.background = '#065f46';
+    } else if (perm === 'denied') {
+        badge.textContent = '🔕 Tắt';
+        badge.style.background = '#7f1d1d';
+    } else {
+        badge.textContent = '🔔 Chưa bật';
+        badge.style.background = '';
+    }
+}
+
+function showNotifStatus() {
+    const perm = Notification.permission;
+    if (perm === 'granted') {
+        alert('✅ Thông báo đang BẬT. App sẽ tự báo trước mỗi sự kiện.');
+    } else if (perm === 'denied') {
+        alert('❌ Thông báo đang TẮT. Vào Cài đặt trình duyệt → Quyền riêng tư → Thông báo để bật lại.');
+    } else {
+        requestNotificationPermission();
+    }
+}
+
+async function requestNotificationPermission() {
+    document.getElementById('notif-permission-bar').style.display = 'none';
+    const result = await Notification.requestPermission();
+    updateNotifStatusBadge();
+    if (result === 'granted') {
+        scheduleAllNotifications();
+        alert('✅ Đã bật thông báo! App sẽ nhắc bạn:\n• 21:00 tối hôm trước\n• 3 tiếng trước khi sự kiện bắt đầu');
+    } else {
+        alert('⚠️ Không được cấp quyền thông báo. Bạn có thể bật lại trong cài đặt trình duyệt.');
+    }
+}
+
+function clearAllNotificationTimers() {
+    notificationTimers.forEach(t => clearTimeout(t));
+    notificationTimers = [];
+}
+
+/**
+ * Tính thời điểm thực tế của sự kiện trong tuần hiện tại hoặc tuần tới.
+ * @param {number} appDay  2=Thứ2 … 8=Chủ Nhật
+ * @param {number} hour    0-23
+ * @returns {Date}
+ */
+function getNextOccurrence(appDay, hour) {
+    // appDay 2-8  →  JS dayOfWeek 1-6,0
+    const jsDay = appDay <= 7 ? appDay - 1 : 0; // 2→1,3→2,...,7→6,8→0
+
+    const now  = new Date();
+    const d    = new Date();
+    d.setHours(hour, 0, 0, 0);
+
+    const todayJs = now.getDay();
+    let diff = jsDay - todayJs;
+    if (diff < 0 || (diff === 0 && d <= now)) diff += 7;
+    d.setDate(d.getDate() + diff);
+    return d;
+}
+
+function scheduleAllNotifications() {
+    if (Notification.permission !== 'granted') return;
+    clearAllNotificationTimers();
+
+    const calendarEvents = events.filter(ev => ev.type === 'calendar');
+
+    calendarEvents.forEach(ev => {
+        scheduleEventNotifications(ev);
+    });
+}
+
+function scheduleEventNotifications(ev) {
+    if (Notification.permission !== 'granted') return;
+
+    // --- Mốc 1: 21:00 tối hôm trước ---
+    // Ngày hôm trước trong lịch app
+    let prevAppDay = ev.day - 1;
+    if (prevAppDay < 2) prevAppDay = 8; // quay vòng Chủ Nhật → Thứ 2 hôm trước
+
+    const t1 = getNextOccurrence(prevAppDay, 21);
+    const ms1 = t1 - Date.now();
+    if (ms1 > 0) {
+        const timer1 = setTimeout(() => {
+            sendNotification(
+                `📅 Nhắc nhở: ${ev.title}`,
+                `Ngày mai ${DAY_NAMES[ev.day]} lúc ${ev.start}:00 — ${ev.note || 'Chuẩn bị sẵn sàng!'}`,
+                ev.id + '_t1'
+            );
+            // Nếu lặp weekly, tự lên lịch lại cho tuần tới
+            if (ev.repeat === 'weekly') {
+                const reTimer = setTimeout(() => scheduleEventNotifications(ev), ms1 + 60000);
+                notificationTimers.push(reTimer);
+            }
+        }, ms1);
+        notificationTimers.push(timer1);
+    }
+
+    // --- Mốc 2: 3 tiếng trước khi bắt đầu ---
+    const notifyHour = ev.start - 3;
+    let   notifyDay  = ev.day;
+    let   actualHour = notifyHour;
+
+    if (notifyHour < 0) {
+        actualHour = 24 + notifyHour;
+        notifyDay  = ev.day - 1;
+        if (notifyDay < 2) notifyDay = 8;
+    }
+
+    const t2  = getNextOccurrence(notifyDay, actualHour);
+    const ms2 = t2 - Date.now();
+    if (ms2 > 0) {
+        const timer2 = setTimeout(() => {
+            sendNotification(
+                `⏰ Còn 3 tiếng: ${ev.title}`,
+                `${DAY_NAMES[ev.day]} ${ev.start}:00 – ${ev.end}:00  ${ev.note ? '| ' + ev.note : ''}`,
+                ev.id + '_t2'
+            );
+        }, ms2);
+        notificationTimers.push(timer2);
+    }
+}
+
+function sendNotification(title, body, tag) {
+    if (Notification.permission !== 'granted') return;
+    try {
+        // Prefer SW notification (shows even when app is closed)
+        if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+            navigator.serviceWorker.ready.then(reg => {
+                reg.showNotification(title, {
+                    body,
+                    tag,
+                    icon: 'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 64 64\'%3E%3Crect width=\'64\' height=\'64\' rx=\'12\' fill=\'%234f46e5\'/%3E%3Ctext x=\'32\' y=\'44\' font-size=\'28\' text-anchor=\'middle\' fill=\'white\' font-family=\'Arial\' font-weight=\'bold\'%3E4W%3C/text%3E%3C/svg%3E',
+                    badge: 'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 64 64\'%3E%3Crect width=\'64\' height=\'64\' rx=\'12\' fill=\'%234f46e5\'/%3E%3C/svg%3E',
+                    vibrate: [200, 100, 200],
+                    requireInteraction: false
+                });
+            });
+        } else {
+            new Notification(title, { body, tag });
+        }
+    } catch(e) { console.warn('Notification error:', e); }
+}
+
+// ================================================================
+// TIMELINE
+// ================================================================
+function highlightTodayColumn() {
+    const jsDay = new Date().getDay(); // 0=Sun,1=Mon...
+    // Convert JS day → app col number
+    const appDay = jsDay === 0 ? 8 : jsDay + 1;
+    const header = document.querySelector(`[data-col="${appDay}"]`);
+    const col    = document.getElementById(`col-${appDay}`);
+    if (header) header.classList.add('text-indigo-600', 'font-extrabold');
+    if (col)    col.style.background = 'rgba(99,102,241,0.04)';
+}
+
+function initSelectHours() {
+    const ss = document.getElementById('event-start');
+    const se = document.getElementById('event-end');
+    ss.innerHTML = '';
+    se.innerHTML = '';
+    for (let i = START_HOUR; i <= END_HOUR; i++) {
+        const h = `${i < 10 ? '0'+i : i}:00`;
+        ss.options.add(new Option(h, i));
+        se.options.add(new Option(h, i));
+    }
+    se.value = START_HOUR + 1;
+}
+
+function toggleRepeatOptions() {
+    const type = document.getElementById('event-type').value;
+    document.getElementById('repeat-config-box').classList.toggle('hidden', type === 'todo');
+}
+
+function renderTimelineBackground() {
+    const bg = document.getElementById('timeline-background-rows');
+    bg.innerHTML = '';
+    for (let i = START_HOUR; i <= END_HOUR; i++) {
+        const row = document.createElement('div');
+        row.className = 'grid timeline-grid time-row items-center';
+        const label = document.createElement('div');
+        label.className = 'text-[10px] md:text-xs text-slate-400 text-center font-bold border-r border-slate-100 h-full flex items-center justify-center bg-slate-50/60';
+        label.innerText = `${i < 10 ? '0'+i : i}:00`;
+        row.appendChild(label);
+        for (let d = 2; d <= 8; d++) {
+            const cell = document.createElement('div');
+            cell.className = 'border-r border-slate-100/80 h-full last:border-r-0';
+            row.appendChild(cell);
+        }
+        bg.appendChild(row);
+    }
+    const totalHours = END_HOUR - START_HOUR + 1;
+    document.getElementById('event-slots-layer').style.height = `${totalHours * ROW_HEIGHT}px`;
+}
+
+function escHtml(str) {
+    return String(str)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function renderEventsOnTimeline() {
+    if (!Array.isArray(events)) { events = [...defaultEvents]; saveToStorage(); }
+    for (let d = 2; d <= 8; d++) document.getElementById(`col-${d}`).innerHTML = '';
+    const todoContainer = document.getElementById('todo-list-render');
+    todoContainer.innerHTML = '';
+
+    events.forEach(ev => {
+        if (ev.type === 'calendar' && ev.start >= START_HOUR && ev.end <= END_HOUR) {
+            const topPos    = (ev.start - START_HOUR) * ROW_HEIGHT;
+            const heightPos = ((ev.end - ev.start) * ROW_HEIGHT) - 4;
+            const card      = document.createElement('div');
+            card.className  = `absolute left-1 right-1 p-1.5 rounded-lg text-[11px] overflow-hidden flex flex-col justify-between pointer-events-auto border transition shadow-xs cursor-pointer active:scale-95 ${
+                ev.repeat === 'weekly'
+                    ? 'bg-indigo-50 border-indigo-200 text-indigo-950 font-semibold'
+                    : 'bg-amber-50 border-amber-200 text-amber-950'
+            }`;
+            card.style.top    = `${topPos}px`;
+            card.style.height = `${heightPos}px`;
+            card.innerHTML = `
+                <div class="font-bold truncate" title="${escHtml(ev.title)}">${escHtml(ev.title)}</div>
+                <div class="text-[9px] opacity-80">${ev.start}h–${ev.end}h ${ev.repeat === 'weekly' ? '🔄' : ''}</div>
+            `;
+            card.onclick = () => {
+                if (confirm(`SỰ KIỆN: ${ev.title}\nThứ: ${DAY_NAMES[ev.day]}  ${ev.start}:00–${ev.end}:00\nGhi chú: ${ev.note || 'Không có'}\n\nXÓA lịch trình này?`))
+                    deleteEvent(ev.id);
+            };
+            document.getElementById(`col-${ev.day}`).appendChild(card);
+        }
+
+        if (ev.type === 'todo') {
+            const li = document.createElement('li');
+            li.className = 'p-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs flex flex-col space-y-1';
+            li.innerHTML = `
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-2 truncate">
+                        <input type="checkbox" ${ev.completed ? 'checked' : ''} onchange="toggleTodoComplete(${ev.id})" class="w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500 cursor-pointer">
+                        <span class="${ev.completed ? 'line-through text-slate-400' : 'font-bold text-slate-800'} truncate">${escHtml(ev.title)} (${DAY_NAMES[ev.day]})</span>
+                    </div>
+                    <button onclick="deleteEvent(${ev.id})" class="text-slate-400 hover:text-red-500 p-1 transition">
+                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                    </button>
+                </div>
+                ${ev.note ? `<div class="text-[11px] text-slate-500 bg-white p-1.5 rounded border border-slate-100 border-l-2 border-l-amber-500 italic">💡 ${escHtml(ev.note)}</div>` : ''}
+            `;
+            todoContainer.appendChild(li);
+        }
+    });
+    lucide.createIcons();
+}
+
+function toggleTodoComplete(id) {
+    const item = events.find(e => e.id === id);
+    if (item) { item.completed = !item.completed; saveToStorage(); renderEventsOnTimeline(); }
+}
+
+function deleteEvent(id) {
+    events = events.filter(e => e.id !== id);
+    saveToStorage();
+    renderEventsOnTimeline();
+    scheduleAllNotifications();
+    deleteEventFromServer(id);
+    document.getElementById('notification-preview').classList.add('hidden');
+}
+
+// ================================================================
+// FORM SUBMIT
+// ================================================================
+document.getElementById('event-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    const title  = document.getElementById('event-title').value.trim();
+    const day    = parseInt(document.getElementById('event-day').value);
+    const type   = document.getElementById('event-type').value;
+    const start  = parseInt(document.getElementById('event-start').value);
+    const end    = parseInt(document.getElementById('event-end').value);
+    const note   = document.getElementById('event-note').value.trim();
+    const radio  = document.querySelector('input[name="event-repeat"]:checked');
+    const repeat = (type === 'calendar' && radio) ? radio.value : 'once';
+
+    if (start >= end) { alert('Lỗi: Giờ kết thúc phải lớn hơn giờ bắt đầu!'); return; }
+    if (!Array.isArray(events)) events = [];
+
+    const newEv = { id: Date.now(), title, day, start, end, repeat, type, note, completed: false };
+    events.push(newEv);
+    saveToStorage();
+    renderEventsOnTimeline();
+
+    // Sync to server (Telegram notifications)
+    addEventToServer(newEv);
+
+    // Schedule notification for this new event
+    if (type === 'calendar') {
+        scheduleEventNotifications(newEv);
+        if (Notification.permission !== 'granted') {
+            document.getElementById('notif-permission-bar').style.display = 'flex';
+        }
+    }
+
+    showNotificationPreview(title, day, start, end);
+    document.getElementById('event-title').value = '';
+    document.getElementById('event-note').value  = '';
+});
+
+function showNotificationPreview(title, day, start, end) {
+    const prevDay    = day - 1 < 2 ? 8 : day - 1;
+    const notifHour  = start - 3;
+    const notifDay   = notifHour < 0 ? (day - 1 < 2 ? 8 : day - 1) : day;
+    const notifHourA = notifHour < 0 ? 24 + notifHour : notifHour;
+
+    document.getElementById('notify-time-list').innerHTML = `
+        <li class="text-indigo-700 font-semibold">[${escHtml(title)}]</li>
+        <li>🌙 Mốc 1 — <strong>21:00 ${DAY_NAMES[prevDay]}</strong> (tối hôm trước)</li>
+        <li>⏰ Mốc 2 — <strong>${notifHourA < 10 ? '0'+notifHourA : notifHourA}:00 ${DAY_NAMES[notifDay]}</strong> (trước 3 tiếng)</li>
+    `;
+    document.getElementById('notification-preview').classList.remove('hidden');
+}
+
+// ================================================================
+// MEMBERS
+// ================================================================
+function renderMemberList() {
+    const keyword = document.getElementById('member-search').value.toLowerCase().trim();
+    const tbody   = document.getElementById('member-table-body');
+    tbody.innerHTML = '';
+
+    const filtered = members.filter(m =>
+        m.name.toLowerCase().includes(keyword) || m.phone.includes(keyword)
+    );
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="2" class="p-4 text-center text-slate-400 italic">Không tìm thấy thành viên</td></tr>`;
+        return;
+    }
+
+    filtered.forEach(m => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-50/50 transition';
+        tr.innerHTML = `
+            <td class="p-2.5">
+                <div class="font-bold text-slate-800 text-xs">${escHtml(m.name)}</div>
+                <div class="text-slate-400 text-[10px] flex items-center mt-0.5">
+                    <i data-lucide="phone" class="w-2.5 h-2.5 mr-0.5"></i> ${escHtml(m.phone)}
+                </div>
+            </td>
+            <td class="p-2.5 text-center">
+                <input type="checkbox" ${m.present ? 'checked' : ''} onchange="toggleAttendance('${escHtml(m.phone)}')" class="w-5 h-5 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer">
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+    lucide.createIcons();
+}
+
+function toggleAttendance(phone) {
+    const m = members.find(m => m.phone === phone);
+    if (m) { m.present = !m.present; saveToStorage(); }
+}
+
+function handleExcelImport(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+        try {
+            const data     = new Uint8Array(ev.target.result);
+            const wb       = XLSX.read(data, { type: 'array' });
+            const ws       = wb.Sheets[wb.SheetNames[0]];
+            const jsonRows = XLSX.utils.sheet_to_json(ws);
+            let imported   = [];
+            jsonRows.forEach(row => {
+                const name  = row["Họ tên"] || row["Hoten"] || row["Tên"] || row["Name"] || "";
+                const phone = row["Số điện thoại"] || row["SĐT"] || row["Phone"] || "";
+                if (name && phone) imported.push({ name: name.toString().trim(), phone: phone.toString().trim().replace(/[^0-9]/g,''), present: true });
+            });
+            if (imported.length > 0) {
+                members = imported;
+                saveToStorage();
+                renderMemberList();
+                alert(`✅ Đã nạp ${imported.length} thành viên!`);
+            } else {
+                alert('Không tìm thấy dữ liệu hợp lệ trong file.');
+            }
+        } catch(err) { alert('Lỗi đọc Excel: ' + err.message); }
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+function exportAttendanceToExcel() {
+    try {
+        const data = members.map((m, i) => ({
+            "STT": i+1, "Họ và Tên": m.name,
+            "Số Điện Thoại": m.phone,
+            "Trạng Thái": m.present ? "Có Mặt (X)" : "Vắng Mặt"
+        }));
+        const ws = XLSX.utils.json_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "DiemDanh_4W");
+        ws["!cols"] = [{ wch:6 },{ wch:25 },{ wch:15 },{ wch:20 }];
+        XLSX.writeFile(wb, `DiemDanh_Lop_${new Date().toISOString().slice(0,10)}.xlsx`);
+    } catch(err) { alert('Lỗi xuất Excel: ' + err.message); }
+}
+
+// ================================================================
+// SERVER SETTINGS UI
+// ================================================================
+function updateServerStatusUI() {
+    const el  = document.getElementById('server-status');
+    const inp = document.getElementById('server-url-input');
+    if (SERVER_URL) {
+        inp.value = SERVER_URL;
+        el.innerHTML = `<span class="text-emerald-600 font-bold">✅ Đã kết nối: ${SERVER_URL}</span>`;
+    } else {
+        el.innerHTML = `<span class="text-amber-600">⚠️ Chưa nhập URL server — thông báo Telegram chưa hoạt động</span>`;
+    }
+}
+
+async function saveAndSyncServer() {
+    const url = document.getElementById('server-url-input').value.trim().replace(/\/$/, '');
+    if (!url) { alert('Vui lòng nhập URL server!'); return; }
+    localStorage.setItem('4w_server_url', url);
+    SERVER_URL = url;
+    updateServerStatusUI();
+    await syncToServer(events);
+    alert('✅ Đã lưu và đồng bộ ' + events.length + ' sự kiện lên server!');
+}
+
+async function testServer() {
+    if (!SERVER_URL) { alert('Chưa nhập URL server!'); return; }
+    try {
+        const res  = await fetch(`${SERVER_URL}/api/test`);
+        const data = await res.json();
+        if (data.ok) alert('✅ Server hoạt động tốt!\nTin nhắn test đã gửi qua Telegram.');
+        else alert('❌ Server lỗi: ' + JSON.stringify(data));
+    } catch(e) {
+        alert('❌ Không kết nối được server:\n' + e.message);
+    }
+}
+
+// ================================================================
+// INIT
+// ================================================================
+window.addEventListener('DOMContentLoaded', () => {
+    loadFromStorage();
+    initSelectHours();
+    renderTimelineBackground();
+    renderEventsOnTimeline();
+    renderMemberList();
+    highlightTodayColumn();
+    lucide.createIcons();
+    updateNotifStatusBadge();
+    updateServerStatusUI();
+
+    // Show permission bar if not yet decided
+    if (Notification.permission === 'default') {
+        document.getElementById('notif-permission-bar').style.display = 'flex';
+    }
+
+    // Re-schedule all notifications on app open
+    if (Notification.permission === 'granted') {
+        scheduleAllNotifications();
+    }
+
+    // Sync all events to server on startup (nếu online)
+    if (navigator.onLine && SERVER_URL) {
+        syncToServer(events);
+    }
+});
+</script>
+</body>
+</html>
