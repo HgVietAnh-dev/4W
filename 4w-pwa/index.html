@@ -187,6 +187,24 @@
                     </div>
                 </div>
 
+                <div id="notify-before-box" class="bg-amber-50 p-2.5 rounded-xl border border-dashed border-amber-200">
+                    <label class="block text-[11px] font-bold text-amber-800 mb-1.5">🔔 Nhắc trước sự kiện:</label>
+                    <div class="flex flex-wrap gap-x-4 gap-y-1.5 text-xs">
+                        <label class="flex items-center space-x-1.5 cursor-pointer">
+                            <input type="radio" name="notify-before" value="1m" class="w-4 h-4 text-amber-500 focus:ring-amber-400">
+                            <span>1 phút trước</span>
+                        </label>
+                        <label class="flex items-center space-x-1.5 cursor-pointer">
+                            <input type="radio" name="notify-before" value="2h" checked class="w-4 h-4 text-amber-500 focus:ring-amber-400">
+                            <span class="text-amber-700 font-semibold">2 tiếng trước</span>
+                        </label>
+                        <label class="flex items-center space-x-1.5 cursor-pointer">
+                            <input type="radio" name="notify-before" value="3h" class="w-4 h-4 text-amber-500 focus:ring-amber-400">
+                            <span>3 tiếng trước</span>
+                        </label>
+                    </div>
+                </div>
+
                 <button type="submit" class="w-full bg-indigo-600 text-white font-semibold text-xs md:text-sm py-2.5 rounded-xl hover:bg-indigo-700 active:scale-[0.99] transition flex justify-center items-center shadow-xs">
                     <i data-lucide="plus-circle" class="w-4 h-4 mr-1"></i> Thiết lập & Tạo thông báo
                 </button>
@@ -320,7 +338,7 @@ function saveToStorage() {
 // CONSTANTS
 // ================================================================
 const START_HOUR  = 5;
-const END_HOUR    = 22;
+const END_HOUR    = 23;
 const ROW_HEIGHT  = 65;
 // day mapping: 2=Mon...8=Sun  →  JS getDay(): 1=Mon...0=Sun
 const DAY_NAMES   = ["", "", "Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "Chủ Nhật"];
@@ -472,11 +490,10 @@ function scheduleEventNotifications(ev) {
     if (Notification.permission !== 'granted') return;
 
     // --- Mốc 1: 21:00 tối hôm trước ---
-    // Ngày hôm trước trong lịch app
     let prevAppDay = ev.day - 1;
-    if (prevAppDay < 2) prevAppDay = 8; // quay vòng Chủ Nhật → Thứ 2 hôm trước
+    if (prevAppDay < 2) prevAppDay = 8;
 
-    const t1 = getNextOccurrence(prevAppDay, 21);
+    const t1  = getNextOccurrence(prevAppDay, 21);
     const ms1 = t1 - Date.now();
     if (ms1 > 0) {
         const timer1 = setTimeout(() => {
@@ -485,7 +502,6 @@ function scheduleEventNotifications(ev) {
                 `Ngày mai ${DAY_NAMES[ev.day]} lúc ${ev.start}:00 — ${ev.note || 'Chuẩn bị sẵn sàng!'}`,
                 ev.id + '_t1'
             );
-            // Nếu lặp weekly, tự lên lịch lại cho tuần tới
             if (ev.repeat === 'weekly') {
                 const reTimer = setTimeout(() => scheduleEventNotifications(ev), ms1 + 60000);
                 notificationTimers.push(reTimer);
@@ -494,23 +510,20 @@ function scheduleEventNotifications(ev) {
         notificationTimers.push(timer1);
     }
 
-    // --- Mốc 2: 3 tiếng trước khi bắt đầu ---
-    const notifyHour = ev.start - 3;
-    let   notifyDay  = ev.day;
-    let   actualHour = notifyHour;
+    // --- Mốc 2: nhắc trước X phút/giờ ---
+    const nb = ev.notifyBefore || '2h';
+    let offsetMinutes = nb === '1m' ? 1 : nb === '2h' ? 120 : 180; // 1m / 2h / 3h
 
-    if (notifyHour < 0) {
-        actualHour = 24 + notifyHour;
-        notifyDay  = ev.day - 1;
-        if (notifyDay < 2) notifyDay = 8;
-    }
+    // Tính thời điểm thông báo = giờ bắt đầu - offset
+    const eventMs   = getNextOccurrence(ev.day, ev.start).getTime();
+    const notifyMs  = eventMs - offsetMinutes * 60 * 1000;
+    const ms2       = notifyMs - Date.now();
 
-    const t2  = getNextOccurrence(notifyDay, actualHour);
-    const ms2 = t2 - Date.now();
+    const label = nb === '1m' ? '1 phút' : nb === '2h' ? '2 tiếng' : '3 tiếng';
     if (ms2 > 0) {
         const timer2 = setTimeout(() => {
             sendNotification(
-                `⏰ Còn 3 tiếng: ${ev.title}`,
+                `⏰ Còn ${label}: ${ev.title}`,
                 `${DAY_NAMES[ev.day]} ${ev.start}:00 – ${ev.end}:00  ${ev.note ? '| ' + ev.note : ''}`,
                 ev.id + '_t2'
             );
@@ -569,6 +582,7 @@ function initSelectHours() {
 function toggleRepeatOptions() {
     const type = document.getElementById('event-type').value;
     document.getElementById('repeat-config-box').classList.toggle('hidden', type === 'todo');
+    document.getElementById('notify-before-box').classList.toggle('hidden', type === 'todo');
 }
 
 function renderTimelineBackground() {
@@ -668,19 +682,21 @@ function deleteEvent(id) {
 document.getElementById('event-form').addEventListener('submit', function(e) {
     e.preventDefault();
 
-    const title  = document.getElementById('event-title').value.trim();
-    const day    = parseInt(document.getElementById('event-day').value);
-    const type   = document.getElementById('event-type').value;
-    const start  = parseInt(document.getElementById('event-start').value);
-    const end    = parseInt(document.getElementById('event-end').value);
-    const note   = document.getElementById('event-note').value.trim();
-    const radio  = document.querySelector('input[name="event-repeat"]:checked');
-    const repeat = (type === 'calendar' && radio) ? radio.value : 'once';
+    const title        = document.getElementById('event-title').value.trim();
+    const day          = parseInt(document.getElementById('event-day').value);
+    const type         = document.getElementById('event-type').value;
+    const start        = parseInt(document.getElementById('event-start').value);
+    const end          = parseInt(document.getElementById('event-end').value);
+    const note         = document.getElementById('event-note').value.trim();
+    const radio        = document.querySelector('input[name="event-repeat"]:checked');
+    const repeat       = (type === 'calendar' && radio) ? radio.value : 'once';
+    const nbRadio      = document.querySelector('input[name="notify-before"]:checked');
+    const notifyBefore = (type === 'calendar' && nbRadio) ? nbRadio.value : '2h';
 
     if (start >= end) { alert('Lỗi: Giờ kết thúc phải lớn hơn giờ bắt đầu!'); return; }
     if (!Array.isArray(events)) events = [];
 
-    const newEv = { id: Date.now(), title, day, start, end, repeat, type, note, completed: false };
+    const newEv = { id: Date.now(), title, day, start, end, repeat, type, note, notifyBefore, completed: false };
     events.push(newEv);
     saveToStorage();
     renderEventsOnTimeline();
@@ -696,21 +712,26 @@ document.getElementById('event-form').addEventListener('submit', function(e) {
         }
     }
 
-    showNotificationPreview(title, day, start, end);
+    showNotificationPreview(title, day, start, end, notifyBefore);
     document.getElementById('event-title').value = '';
     document.getElementById('event-note').value  = '';
 });
 
-function showNotificationPreview(title, day, start, end) {
-    const prevDay    = day - 1 < 2 ? 8 : day - 1;
-    const notifHour  = start - 3;
-    const notifDay   = notifHour < 0 ? (day - 1 < 2 ? 8 : day - 1) : day;
-    const notifHourA = notifHour < 0 ? 24 + notifHour : notifHour;
+function showNotificationPreview(title, day, start, end, notifyBefore) {
+    const prevDay = day - 1 < 2 ? 8 : day - 1;
+    const nb      = notifyBefore || '2h';
+    const label   = nb === '1m' ? '1 phút' : nb === '2h' ? '2 tiếng' : '3 tiếng';
+
+    // Tính giờ thông báo mốc 2
+    const offsetMin  = nb === '1m' ? 1 : nb === '2h' ? 120 : 180;
+    const totalMin   = start * 60 - offsetMin;
+    const notifH     = Math.floor(((totalMin % 1440) + 1440) % 1440 / 60);
+    const notifDay2  = totalMin < 0 ? (day - 1 < 2 ? 8 : day - 1) : day;
 
     document.getElementById('notify-time-list').innerHTML = `
         <li class="text-indigo-700 font-semibold">[${escHtml(title)}]</li>
         <li>🌙 Mốc 1 — <strong>21:00 ${DAY_NAMES[prevDay]}</strong> (tối hôm trước)</li>
-        <li>⏰ Mốc 2 — <strong>${notifHourA < 10 ? '0'+notifHourA : notifHourA}:00 ${DAY_NAMES[notifDay]}</strong> (trước 3 tiếng)</li>
+        <li>⏰ Mốc 2 — <strong>${notifH < 10 ? '0'+notifH : notifH}:${nb === '1m' ? String(start*60%60 - 1).padStart(2,'0') : '00'} ${DAY_NAMES[notifDay2]}</strong> (trước ${label})</li>
     `;
     document.getElementById('notification-preview').classList.remove('hidden');
 }

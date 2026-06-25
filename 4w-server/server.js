@@ -91,16 +91,21 @@ cron.schedule('* * * * *', () => {
             sendTelegram(msg);
         }
 
-        // --- Mốc 2: 3 tiếng trước khi bắt đầu ---
-        let notifyHour = ev.start - 3;
-        let notifyDay  = ev.day;
-        if (notifyHour < 0) {
-            notifyHour = 24 + notifyHour;
-            notifyDay  = ev.day - 1 < 2 ? 8 : ev.day - 1;
-        }
-        if (todayApp === notifyDay && nowHour === notifyHour && nowMin === 0) {
+        // --- Mốc 2: nhắc trước X phút/giờ (theo notifyBefore của từng sự kiện) ---
+        const nb = ev.notifyBefore || '2h';
+        const offsetMin = nb === '1m' ? 1 : nb === '2h' ? 120 : 180;
+        const label     = nb === '1m' ? '1 phút' : nb === '2h' ? '2 tiếng' : '3 tiếng';
+
+        // Tính giờ & ngày cần thông báo
+        const totalMin  = ev.start * 60 - offsetMin;
+        const notifH    = Math.floor(((totalMin % 1440) + 1440) % 1440 / 60);
+        const notifM    = ((totalMin % 60) + 60) % 60;
+        let   notifDay  = ev.day;
+        if (totalMin < 0) { notifDay = ev.day - 1 < 2 ? 8 : ev.day - 1; }
+
+        if (todayApp === notifDay && nowHour === notifH && nowMin === notifM) {
             const msg =
-                `⏰ <b>Còn 3 tiếng nữa!</b>\n\n` +
+                `⏰ <b>Còn ${label} nữa!</b>\n\n` +
                 `📌 <b>${ev.title}</b>\n` +
                 `🗓 ${DAY_NAMES[ev.day]} — <b>${ev.start}:00</b> → ${ev.end}:00\n` +
                 (ev.note ? `📝 ${ev.note}` : '');
@@ -154,8 +159,13 @@ app.post('/api/event', (req, res) => {
     // Gửi xác nhận ngay qua Telegram
     if (ev.type === 'calendar') {
         const prevDay  = ev.day - 1 < 2 ? 8 : ev.day - 1;
-        let nh = ev.start - 3, nd = ev.day;
-        if (nh < 0) { nh = 24 + nh; nd = ev.day - 1 < 2 ? 8 : ev.day - 1; }
+        const nb       = ev.notifyBefore || '2h';
+        const label    = nb === '1m' ? '1 phút' : nb === '2h' ? '2 tiếng' : '3 tiếng';
+        const offsetMin = nb === '1m' ? 1 : nb === '2h' ? 120 : 180;
+        const totalMin = ev.start * 60 - offsetMin;
+        const notifH   = Math.floor(((totalMin % 1440) + 1440) % 1440 / 60);
+        const notifM   = ((totalMin % 60) + 60) % 60;
+        const notifDay = totalMin < 0 ? (ev.day - 1 < 2 ? 8 : ev.day - 1) : ev.day;
         const msg =
             `✅ <b>Đã lên lịch thông báo!</b>\n\n` +
             `📌 <b>${ev.title}</b>\n` +
@@ -163,7 +173,7 @@ app.post('/api/event', (req, res) => {
             (ev.note ? `📝 ${ev.note}\n` : '') +
             `\n🔔 Sẽ nhắc bạn:\n` +
             `  • 21:00 ${DAY_NAMES[prevDay]} (tối hôm trước)\n` +
-            `  • ${nh < 10 ? '0'+nh : nh}:00 ${DAY_NAMES[nd]} (trước 3 tiếng)`;
+            `  • ${String(notifH).padStart(2,'0')}:${String(notifM).padStart(2,'0')} ${DAY_NAMES[notifDay]} (trước ${label})`;
         sendTelegram(msg);
     }
 
