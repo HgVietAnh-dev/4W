@@ -54,7 +54,8 @@ async function sendTelegram(text) {
 // NOTIFICATION LOGIC
 // ================================================================
 function getTodayAppDay() {
-    const jsDay = new Date().getDay(); // 0=Sun
+    const nowVN = new Date(Date.now() + 7 * 60 * 60 * 1000);
+    const jsDay = nowVN.getUTCDay(); // 0=Sun
     return jsDay === 0 ? 8 : jsDay + 1; // Sun→8, Mon→2,...,Sat→7
 }
 
@@ -65,10 +66,14 @@ function getTomorrowAppDay() {
 
 // Chạy mỗi phút — kiểm tra có sự kiện nào cần thông báo không
 cron.schedule('* * * * *', () => {
-    const now      = new Date();
-    const nowHour  = now.getHours();
-    const nowMin   = now.getMinutes();
-    const todayApp = getTodayAppDay();
+    // Render chạy UTC — đổi sang giờ Việt Nam (UTC+7)
+    const nowVN    = new Date(Date.now() + 7 * 60 * 60 * 1000);
+    const nowHour  = nowVN.getUTCHours();
+    const nowMin   = nowVN.getUTCMinutes();
+
+    // getUTCDay() trên giờ VN: 0=CN,1=T2...6=T7 → appDay
+    const jsDay    = nowVN.getUTCDay();
+    const todayApp = jsDay === 0 ? 8 : jsDay + 1;
 
     events.forEach(ev => {
         if (ev.type !== 'calendar') return;
@@ -104,8 +109,8 @@ cron.schedule('* * * * *', () => {
     });
 });
 
-// Mỗi sáng 7:00 gửi tổng kết lịch hôm nay
-cron.schedule('0 7 * * *', () => {
+// Mỗi sáng 7:00 (giờ VN = 0:00 UTC) gửi tổng kết lịch hôm nay
+cron.schedule('0 0 * * *', () => {
     const todayApp   = getTodayAppDay();
     const todayEvs   = events.filter(ev => ev.type === 'calendar' && ev.day === todayApp);
 
