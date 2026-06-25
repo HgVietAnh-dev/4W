@@ -10,6 +10,7 @@
     "express": "^4.18.2",
     "node-cron": "^3.0.3",
     "node-fetch": "^2.7.0",
-    "cors": "^2.8.5"
+    "cors": "^2.8.5",
+    "@supabase/supabase-js": "^2.50.0"
   }
 }

@@ -1,3 +1,4 @@
+const { createClient } = require('@supabase/supabase-js');
 const express = require('express');
 const cron    = require('node-cron');
 const fetch   = require('node-fetch');
@@ -18,6 +19,9 @@ const TG_API    = `https://api.telegram.org/bot${BOT_TOKEN}`;
 // IN-MEMORY EVENT STORE (được đồng bộ từ PWA app)
 // ================================================================
 let events = [];
+const supabase = process.env.SUPABASE_URL && process.env.SUPABASE_KEY
+? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY)
+: null;
 
 // Mapping app day (2-8) → JS getDay() (0=Sun,1=Mon...6=Sat)
 // appDay: 2=T2,3=T3,4=T4,5=T5,6=T6,7=T7,8=CN
